@@ -35,6 +35,17 @@ def health_check():
 			"status": "ok",
 			"cache_available": cache.is_available(),
 			"weaviate_available": bool(agent.weaviate_client),
+			"weaviate_cloud": getattr(agent, "weaviate_cloud", False),
+			"weaviate_query_agent": bool(getattr(agent, "weaviate_query_agent", None)),
+			"weaviate_personalization_agent": bool(
+				getattr(agent, "weaviate_personalization_agent", None)
+			),
+			"weaviate_transformation_agent_enabled": os.getenv(
+				"WEAVIATE_ENABLE_TRANSFORMATION_AGENT", "false"
+			)
+			.strip()
+			.lower()
+			in ("1", "true", "yes"),
 		}
 	)
 

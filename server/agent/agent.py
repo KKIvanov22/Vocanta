@@ -1,3 +1,4 @@
+import atexit
 import hashlib
 import importlib
 import ipaddress
@@ -7,6 +8,7 @@ import re
 import socket
 import threading
 import time
+import uuid
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional, Tuple
@@ -42,7 +44,17 @@ class Agent:
 		self.session = self._build_http_session()
 
 		self.weaviate_client = self._build_weaviate_client()
+		self.weaviate_cloud = self._is_weaviate_cloud_deployment(
+			os.getenv("WEAVIATE_URL", "").strip()
+		)
+		self.weaviate_query_agent = None
+		self.weaviate_personalization_agent = None
+		self._transformation_lock = threading.Lock()
+		self._transformation_thread: Optional[threading.Thread] = None
 		self._ensure_weaviate_schema()
+		self._init_weaviate_agents()
+		if self.weaviate_client:
+			atexit.register(self._close_weaviate)
 
 	def search_jobs(self, payload: Dict[str, Any]) -> Dict[str, Any]:
 		profile = self._validate_payload(payload)
@@ -55,6 +67,7 @@ class Agent:
 		scanned_jobs, source_status = self._scan_sources(profile)
 		scanned_jobs = self._deduplicate_jobs(scanned_jobs)
 		self._index_jobs(scanned_jobs)
+		self._maybe_enqueue_transformation(len(scanned_jobs))
 
 		weaviate_jobs = self._query_weaviate(profile)
 		combined_jobs = self._deduplicate_jobs(scanned_jobs + weaviate_jobs)
@@ -608,6 +621,35 @@ class Agent:
 		session.mount("https://", adapter)
 		return session
 
+	def _weaviate_inference_headers(self) -> Dict[str, str]:
+		key = (
+			os.getenv("WEAVIATE_INFERENCE_API_KEY", "").strip()
+			or os.getenv("OPENAI_API_KEY", "").strip()
+		)
+		if not key:
+			return {}
+		return {"X-INFERENCE-PROVIDER-API-KEY": key}
+
+	def _is_weaviate_cloud_deployment(self, url: str) -> bool:
+		explicit = os.getenv("WEAVIATE_CLOUD", "").strip().lower()
+		if explicit in ("1", "true", "yes"):
+			return True
+		if explicit in ("0", "false", "no"):
+			return False
+		u = (url or "").lower()
+		return (
+			"weaviate.network" in u
+			or "wcs.api.weaviate.io" in u
+			or "weaviate.cloud" in u
+		)
+
+	def _close_weaviate(self):
+		try:
+			if self.weaviate_client:
+				self.weaviate_client.close()
+		except Exception:
+			pass
+
 	def _build_weaviate_client(self):
 		weaviate_url = os.getenv("WEAVIATE_URL", "").strip()
 		if not weaviate_url:
@@ -615,47 +657,130 @@ class Agent:
 
 		try:
 			weaviate = importlib.import_module("weaviate")
+			from weaviate.classes.init import Auth
 		except Exception:
 			return None
 
 		api_key = os.getenv("WEAVIATE_API_KEY", "").strip()
+		headers = self._weaviate_inference_headers()
+		auth_creds = Auth.api_key(api_key) if api_key else None
 		try:
-			if api_key:
-				auth = None
-				if hasattr(weaviate, "AuthApiKey"):
-					auth = weaviate.AuthApiKey(api_key)
-				elif hasattr(weaviate, "auth") and hasattr(weaviate.auth, "AuthApiKey"):
-					auth = weaviate.auth.AuthApiKey(api_key)
-				return weaviate.Client(url=weaviate_url, auth_client_secret=auth)
-			return weaviate.Client(url=weaviate_url)
+			if self._is_weaviate_cloud_deployment(weaviate_url):
+				return weaviate.connect_to_weaviate_cloud(
+					cluster_url=weaviate_url,
+					auth_credentials=auth_creds,
+					headers=headers or None,
+				)
+			parsed = urlparse(weaviate_url)
+			host = parsed.hostname
+			if not host:
+				return None
+			http_secure = parsed.scheme == "https"
+			if parsed.port is not None:
+				http_port = parsed.port
+			else:
+				http_port = 443 if http_secure else 8080
+			grpc_port = int(os.getenv("WEAVIATE_GRPC_PORT", "50051"))
+			grpc_explicit = os.getenv("WEAVIATE_GRPC_SECURE", "").strip().lower()
+			if grpc_explicit in ("1", "true", "yes"):
+				grpc_secure = True
+			elif grpc_explicit in ("0", "false", "no"):
+				grpc_secure = False
+			else:
+				grpc_secure = http_secure
+			return weaviate.connect_to_custom(
+				http_host=host,
+				http_port=http_port,
+				http_secure=http_secure,
+				grpc_host=host,
+				grpc_port=grpc_port,
+				grpc_secure=grpc_secure,
+				auth_credentials=auth_creds,
+				headers=headers or None,
+			)
 		except Exception:
 			return None
+
+	def _init_weaviate_agents(self):
+		if not self.weaviate_client or not self.weaviate_cloud:
+			return
+		if self._is_truthy(os.getenv("WEAVIATE_DISABLE_AGENTS", "false")):
+			return
+		try:
+			from weaviate.agents.classes import QueryAgentCollectionConfig
+			from weaviate.agents.query import QueryAgent
+
+			self.weaviate_query_agent = QueryAgent(
+				client=self.weaviate_client,
+				collections=[
+					QueryAgentCollectionConfig(
+						name="JobListing",
+						view_properties=[
+							"title",
+							"company",
+							"location",
+							"salary",
+							"job_url",
+							"source",
+							"posted_date",
+							"description",
+						],
+					)
+				],
+			)
+		except Exception:
+			self.weaviate_query_agent = None
+
+		try:
+			from weaviate.agents.personalization import PersonalizationAgent
+			from weaviate.classes.config import DataType
+
+			ref = "JobListing"
+			vec_name = os.getenv("WEAVIATE_VECTOR_NAME", "").strip() or None
+			if PersonalizationAgent.exists(self.weaviate_client, ref):
+				self.weaviate_personalization_agent = PersonalizationAgent.connect(
+					client=self.weaviate_client,
+					reference_collection=ref,
+					vector_name=vec_name,
+				)
+			else:
+				self.weaviate_personalization_agent = PersonalizationAgent.create(
+					client=self.weaviate_client,
+					reference_collection=ref,
+					vector_name=vec_name,
+					user_properties={
+						"age": DataType.NUMBER,
+						"skills": DataType.TEXT_ARRAY,
+						"city": DataType.TEXT,
+						"education": DataType.TEXT,
+					},
+				)
+		except Exception:
+			self.weaviate_personalization_agent = None
 
 	def _ensure_weaviate_schema(self):
 		if not self.weaviate_client:
 			return
 
 		try:
-			schema = self.weaviate_client.schema.get() or {}
-			classes = {item.get("class") for item in schema.get("classes", [])}
-			if "JobListing" in classes:
+			from weaviate.classes.config import Configure, DataType, Property
+
+			if self.weaviate_client.collections.exists("JobListing"):
 				return
 
-			self.weaviate_client.schema.create_class(
-				{
-					"class": "JobListing",
-					"vectorizer": "text2vec-openai",
-					"properties": [
-						{"name": "title", "dataType": ["text"]},
-						{"name": "company", "dataType": ["text"]},
-						{"name": "location", "dataType": ["text"]},
-						{"name": "salary", "dataType": ["text"]},
-						{"name": "job_url", "dataType": ["text"]},
-						{"name": "source", "dataType": ["text"]},
-						{"name": "posted_date", "dataType": ["text"]},
-						{"name": "description", "dataType": ["text"]},
-					],
-				}
+			self.weaviate_client.collections.create(
+				name="JobListing",
+				properties=[
+					Property(name="title", data_type=DataType.TEXT),
+					Property(name="company", data_type=DataType.TEXT),
+					Property(name="location", data_type=DataType.TEXT),
+					Property(name="salary", data_type=DataType.TEXT),
+					Property(name="job_url", data_type=DataType.TEXT),
+					Property(name="source", data_type=DataType.TEXT),
+					Property(name="posted_date", data_type=DataType.TEXT),
+					Property(name="description", data_type=DataType.TEXT),
+				],
+				vectorizer_config=Configure.Vectorizer.text2vec_openai(),
 			)
 		except Exception:
 			pass
@@ -665,8 +790,8 @@ class Agent:
 			return
 
 		try:
-			with self.weaviate_client.batch as batch:
-				batch.batch_size = 20
+			collection = self.weaviate_client.collections.get("JobListing")
+			with collection.batch.fixed_size(batch_size=20) as batch:
 				for job in jobs[:200]:
 					payload = {
 						"title": job.get("title", ""),
@@ -678,55 +803,174 @@ class Agent:
 						"posted_date": job.get("posted_date", ""),
 						"description": job.get("description", ""),
 					}
-					batch.add_data_object(payload, "JobListing")
+					batch.add_object(properties=payload)
 		except Exception:
 			pass
+
+	def _maybe_enqueue_transformation(self, indexed_count: int):
+		if (
+			not self.weaviate_client
+			or not self.weaviate_cloud
+			or indexed_count <= 0
+			or not self._is_truthy(os.getenv("WEAVIATE_ENABLE_TRANSFORMATION_AGENT", "false"))
+		):
+			return
+
+		def run():
+			try:
+				from weaviate.agents.classes import Operations
+				from weaviate.agents.transformation import TransformationAgent
+				from weaviate.classes.config import DataType
+
+				op = Operations.append_property(
+					property_name="vocanta_role_summary",
+					data_type=DataType.TEXT,
+					view_properties=["title", "description"],
+					instruction=(
+						"In one short professional phrase (max 12 words), describe the primary role or specialty."
+					),
+				)
+				t_agent = TransformationAgent(
+					client=self.weaviate_client,
+					collection="JobListing",
+					operations=[op],
+				)
+				t_agent.update_all()
+			except Exception:
+				pass
+
+		with self._transformation_lock:
+			if self._transformation_thread and self._transformation_thread.is_alive():
+				return
+			self._transformation_thread = threading.Thread(target=run, daemon=True)
+			self._transformation_thread.start()
+
+	def _profile_to_nl_query(self, profile: Dict[str, Any]) -> str:
+		skills = " ".join(profile["skills"])
+		return (
+			f"Relevant jobs for skills: {skills}. "
+			f"Location preference: {profile['city']}. "
+			f"Education: {profile['education']}."
+		)
+
+	def _persona_uuid_for_profile(self, profile: Dict[str, Any]) -> uuid.UUID:
+		serialized = json.dumps(profile, sort_keys=True, ensure_ascii=True)
+		return uuid.uuid5(uuid.NAMESPACE_URL, f"vocanta:{serialized}")
+
+	def _upsert_persona_for_personalization(self, persona_id: uuid.UUID, profile: Dict[str, Any]):
+		pa = self.weaviate_personalization_agent
+		if not pa:
+			return
+		from weaviate.agents.classes import Persona
+
+		persona = Persona(
+			persona_id=persona_id,
+			properties={
+				"age": profile["age"],
+				"skills": profile["skills"],
+				"city": profile["city"],
+				"education": profile["education"],
+			},
+		)
+		if pa.has_persona(persona_id):
+			pa.update_persona(persona)
+		else:
+			pa.add_persona(persona)
+
+	def _job_from_weaviate_object(self, obj: Any) -> Optional[Dict[str, Any]]:
+		props = getattr(obj, "properties", None)
+		if props is None and isinstance(obj, dict):
+			props = obj
+		if not isinstance(props, dict):
+			return None
+		return self._normalize_job(
+			{
+				"title": props.get("title", ""),
+				"company": props.get("company", ""),
+				"location": props.get("location", ""),
+				"salary": props.get("salary", ""),
+				"job_url": props.get("job_url", ""),
+				"source": props.get("source", "weaviate"),
+				"posted_date": props.get("posted_date", ""),
+				"description": props.get("description", ""),
+			}
+		)
+
+	def _query_weaviate_near_text_fallback(self, query_terms: str) -> List[Dict[str, Any]]:
+		if not self.weaviate_client:
+			return []
+		collection = self.weaviate_client.collections.get("JobListing")
+		response = collection.query.near_text(
+			query=query_terms,
+			limit=self.max_results * 3,
+			return_properties=[
+				"title",
+				"company",
+				"location",
+				"salary",
+				"job_url",
+				"source",
+				"posted_date",
+				"description",
+			],
+		)
+		jobs: List[Dict[str, Any]] = []
+		for obj in response.objects:
+			parsed = self._job_from_weaviate_object(obj)
+			if parsed:
+				jobs.append(parsed)
+		return jobs
 
 	def _query_weaviate(self, profile: Dict[str, Any]) -> List[Dict[str, Any]]:
 		if not self.weaviate_client:
 			return []
 
 		query_terms = " ".join(profile["skills"] + [profile["city"], profile["education"]])
-		try:
-			result = (
-				self.weaviate_client.query.get(
-					"JobListing",
-					[
-						"title",
-						"company",
-						"location",
-						"salary",
-						"job_url",
-						"source",
-						"posted_date",
-						"description",
-					],
-				)
-				.with_near_text({"concepts": [query_terms]})
-				.with_limit(self.max_results * 3)
-				.do()
-			)
-		except Exception:
-			return []
+		nl = self._profile_to_nl_query(profile)
+		seen: set = set()
+		out: List[Dict[str, Any]] = []
 
-		data = result.get("data", {}).get("Get", {}).get("JobListing", [])
-		jobs: List[Dict[str, Any]] = []
-		for item in data:
-			jobs.append(
-				self._normalize_job(
-					{
-						"title": item.get("title", ""),
-						"company": item.get("company", ""),
-						"location": item.get("location", ""),
-						"salary": item.get("salary", ""),
-						"job_url": item.get("job_url", ""),
-						"source": item.get("source", "weaviate"),
-						"posted_date": item.get("posted_date", ""),
-						"description": item.get("description", ""),
-					}
+		def add_job(job: Optional[Dict[str, Any]]) -> None:
+			if not job:
+				return
+			key = self._dedupe_key(job)
+			if key in seen:
+				return
+			seen.add(key)
+			out.append(job)
+
+		if self.weaviate_personalization_agent:
+			try:
+				persona_id = self._persona_uuid_for_profile(profile)
+				self._upsert_persona_for_personalization(persona_id, profile)
+				strength = float(os.getenv("WEAVIATE_PERSONALIZATION_STRENGTH", "0.85"))
+				pq = self.weaviate_personalization_agent.query(
+					persona_id=persona_id,
+					strength=strength,
+					overfetch_factor=2.0,
 				)
-			)
-		return jobs
+				presp = pq.near_text(query=nl, limit=self.max_results * 3)
+				for obj in presp.objects:
+					add_job(self._job_from_weaviate_object(obj))
+			except Exception:
+				pass
+
+		if self.weaviate_query_agent:
+			try:
+				search_response = self.weaviate_query_agent.search(nl, limit=self.max_results * 3)
+				for obj in search_response.search_results.objects:
+					add_job(self._job_from_weaviate_object(obj))
+			except Exception:
+				pass
+
+		if len(out) < self.max_results:
+			try:
+				for job in self._query_weaviate_near_text_fallback(query_terms):
+					add_job(job)
+			except Exception:
+				pass
+
+		return out
 
 	def _extract_company_from_text(self, text: str) -> str:
 		if not text:
