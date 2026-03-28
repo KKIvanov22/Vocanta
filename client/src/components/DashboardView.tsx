@@ -1,3 +1,6 @@
+"use client";
+
+import { useState, FormEvent } from "react";
 import {
   Search,
   Sparkles,
@@ -10,16 +13,183 @@ import {
 } from "lucide-react";
 import { JobCard, type Job } from "@/components/JobCard";
 
-// ─── Props from your server component / page ────────────────────────────────
-// Pass `jobs` and `hasSearched` from your server action or API call.
-// This component is purely presentational.
-
-type DashboardViewProps = {
-  jobs?: Job[];
-  hasSearched?: boolean;
+type ApiJob = {
+  title?: string;
+  company?: string;
+  location?: string;
+  salary?: string;
+  description?: string;
+  job_url?: string;
+  source?: string;
+  posted_date?: string;
+  match_score?: number;
 };
 
-export function DashboardView({ jobs = [], hasSearched = false }: DashboardViewProps) {
+type SearchSuccess = {
+  status: "success";
+  data: {
+    results: ApiJob[];
+    profile?: { skills?: string[] };
+  };
+};
+
+function formatSourceLabel(source: string): string {
+  if (!source) return "Listing";
+  return source
+    .split(/[\s._-]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function stableJobId(job: ApiJob, index: number): string {
+  const url = String(job.job_url ?? "").trim();
+  if (url) {
+    let h = 0;
+    for (let i = 0; i < url.length; i++) {
+      h = (Math.imul(31, h) + url.charCodeAt(i)) | 0;
+    }
+    return `u${Math.abs(h).toString(36)}`;
+  }
+  const title = String(job.title ?? "");
+  const company = String(job.company ?? "");
+  const src = String(job.source ?? "");
+  let h = 0;
+  const s = `${src}|${title}|${company}|${index}`;
+  for (let i = 0; i < s.length; i++) {
+    h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  }
+  return `j${Math.abs(h).toString(36)}`;
+}
+
+function skillsMentionedInJob(job: ApiJob, profileSkills: string[]): string[] {
+  const text = `${job.title ?? ""} ${job.description ?? ""}`.toLowerCase();
+  return profileSkills.filter((skill) => text.includes(skill.toLowerCase()));
+}
+
+function mapResultsToJobs(
+  results: ApiJob[],
+  profileSkills: string[],
+): Job[] {
+  return results.map((raw, index) => {
+    const scoreRaw = raw.match_score;
+    const matchScore =
+      typeof scoreRaw === "number" && Number.isFinite(scoreRaw)
+        ? Math.round(Math.min(1, Math.max(0, scoreRaw)) * 100)
+        : 0;
+    const salary = String(raw.salary ?? "").trim();
+    return {
+      id: stableJobId(raw, index),
+      title: String(raw.title ?? "Unknown role"),
+      company: String(raw.company ?? "").trim() || "Company not listed",
+      location: String(raw.location ?? "").trim() || "Location not listed",
+      salary: salary || "Not listed",
+      type: formatSourceLabel(String(raw.source ?? "")),
+      description: String(raw.description ?? "").trim() || "No description available.",
+      skills: skillsMentionedInJob(raw, profileSkills),
+      matchScore,
+    };
+  });
+}
+
+export function DashboardView() {
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    const form = e.currentTarget;
+    const fd = new FormData(form);
+    const ageRaw = String(fd.get("age") ?? "").trim();
+    const city = String(fd.get("city") ?? "").trim();
+    const education = String(fd.get("education") ?? "").trim();
+    const skillsText = String(fd.get("skills") ?? "").trim();
+
+    const skills = skillsText
+      .split(/[,;\n]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const age = parseInt(ageRaw, 10);
+    if (!skills.length) {
+      setError("Please enter at least one skill.");
+      setLoading(false);
+      return;
+    }
+    if (!ageRaw || Number.isNaN(age)) {
+      setError("Please enter a valid age.");
+      setLoading(false);
+      return;
+    }
+    if (!education) {
+      setError("Please select your education level.");
+      setLoading(false);
+      return;
+    }
+    if (!city) {
+      setError("Please enter your city.");
+      setLoading(false);
+      return;
+    }
+
+    let res: Response;
+    try {
+      res = await fetch("/api/jobs/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          skills,
+          age,
+          education,
+          city,
+        }),
+      });
+    } catch {
+      setError("Network error. Try again.");
+      setHasSearched(true);
+      setJobs([]);
+      setLoading(false);
+      return;
+    }
+
+    const json = (await res.json().catch(() => ({}))) as
+      | SearchSuccess
+      | { status?: string; message?: string; type?: string };
+
+    setHasSearched(true);
+
+    if (res.status === 401) {
+      setJobs([]);
+      setError("Your session expired. Please sign in again.");
+      setLoading(false);
+      return;
+    }
+
+    if (!res.ok || json.status !== "success" || !("data" in json)) {
+      const msg =
+        typeof json === "object" &&
+        json !== null &&
+        "message" in json &&
+        typeof (json as { message: unknown }).message === "string"
+          ? (json as { message: string }).message
+          : "Job search failed. Try again.";
+      setJobs([]);
+      setError(msg);
+      setLoading(false);
+      return;
+    }
+
+    const profileSkills = json.data.profile?.skills ?? skills;
+    const list = Array.isArray(json.data.results) ? json.data.results : [];
+    setJobs(mapResultsToJobs(list, profileSkills));
+    setLoading(false);
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
 
@@ -55,8 +225,7 @@ export function DashboardView({ jobs = [], hasSearched = false }: DashboardViewP
               </div>
             </div>
 
-            {/* Form — action/method wired to your backend */}
-            <form action="/api/jobs/match" method="POST" className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-6">
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 {/* Age */}
@@ -145,13 +314,23 @@ export function DashboardView({ jobs = [], hasSearched = false }: DashboardViewP
                 <p className="text-xs text-gray-400 mt-1.5">Separate skills with commas</p>
               </div>
 
+              {error && (
+                <p
+                  className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3"
+                  role="alert"
+                >
+                  {error}
+                </p>
+              )}
+
               {/* Submit */}
               <button
                 type="submit"
-                className="w-full h-12 flex items-center justify-center gap-2 text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 rounded-xl shadow-sm shadow-blue-200 hover:shadow-md hover:shadow-blue-300 transition-all"
+                disabled={loading}
+                className="w-full h-12 flex items-center justify-center gap-2 text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 rounded-xl shadow-sm shadow-blue-200 hover:shadow-md hover:shadow-blue-300 transition-all disabled:opacity-60 disabled:pointer-events-none"
               >
                 <Search className="size-4" />
-                Find Matching Jobs
+                {loading ? "Searching…" : "Find Matching Jobs"}
               </button>
             </form>
           </div>
