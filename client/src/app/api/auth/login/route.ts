@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const res = NextResponse.redirect(new URL("/", request.url));
+  const res = NextResponse.redirect(new URL("/dashboard", request.url));
   res.cookies.set(TOKEN_COOKIE, data.token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, current_app
 from typing import Any, Dict
 
 from agent.agent import Agent
+from routes.auth_routes import require_jwt
 
 job_agent_bp = Blueprint("job_agent", __name__, url_prefix="/api/jobs")
 
@@ -15,6 +16,7 @@ def get_agent() -> Agent:
 
 
 @job_agent_bp.route("/search", methods=["POST"])
+@require_jwt
 def search_jobs():
     agent = get_agent()
 
@@ -60,6 +62,7 @@ def health():
 
 
 @job_agent_bp.route("/sources", methods=["GET"])
+@require_jwt
 def sources():
     agent = get_agent()
 
@@ -74,6 +77,7 @@ def sources():
 
 
 @job_agent_bp.route("/config", methods=["GET"])
+@require_jwt
 def config():
     agent = get_agent()
 
@@ -98,6 +102,7 @@ def config():
 
 
 @job_agent_bp.route("/clear-cache", methods=["POST"])
+@require_jwt
 def clear_cache():
     agent = get_agent()
 

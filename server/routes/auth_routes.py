@@ -1,4 +1,5 @@
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, g
+from functools import wraps
 import os
 import jwt
 from datetime import datetime, timedelta
@@ -23,6 +24,28 @@ def generate_token(user):
 		"exp": datetime.utcnow() + timedelta(seconds=JWT_EXP_DELTA_SECONDS)
 	}
 	return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def decode_token(token: str):
+	try:
+		return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+	except jwt.PyJWTError:
+		return None
+
+
+def require_jwt(f):
+	@wraps(f)
+	def decorated(*args, **kwargs):
+		auth_header = request.headers.get("Authorization", "")
+		if not auth_header.startswith("Bearer "):
+			return jsonify({"status": "error", "message": "Missing or invalid authorization"}), 401
+		token = auth_header[7:].strip()
+		payload = decode_token(token)
+		if not payload:
+			return jsonify({"status": "error", "message": "Invalid or expired token"}), 401
+		g.jwt_payload = payload
+		return f(*args, **kwargs)
+	return decorated
 
 @auth_bp.route("/register", methods=["POST"])
 def register():
