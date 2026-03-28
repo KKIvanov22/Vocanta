@@ -3,8 +3,8 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 
 class Auth(DataAccess):
-	def __init__(self, host, port, dbname, user, password):
-		super().__init__(host, port, dbname, user, password)
+	def __init__(self):
+		super().__init__()
 		self.CreateUserTable()
 
 	def CreateUserTable(self):
