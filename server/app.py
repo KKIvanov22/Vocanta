@@ -10,7 +10,7 @@ from pathlib import Path
 from agent.agent import Agent
 from data.redis_cache import RedisCache
 from routes.auth_routes import auth_bp
-
+from routes.job_agent import job_agent_bp
 
 def _load_env():
 	server_dir = Path(__file__).resolve().parent
@@ -22,11 +22,15 @@ def _load_env():
 
 
 _load_env()
-
-
 app = Flask(__name__)
 CORS(app)
+
+app.config["JOB_AGENT_CACHE"] = None  
+
+
+
 app.register_blueprint(auth_bp)
+app.register_blueprint(job_agent_bp)
 
 redis_url = os.getenv("REDIS_URL")
 cache = RedisCache(redis_url=redis_url)
