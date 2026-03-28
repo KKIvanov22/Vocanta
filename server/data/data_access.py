@@ -1,5 +1,5 @@
 import psycopg2 as pg 
-
+import os
 
 class DataAccess:
 	def __init__(self):

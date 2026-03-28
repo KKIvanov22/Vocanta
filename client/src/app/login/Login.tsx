@@ -2,7 +2,11 @@ import { Mail, Lock } from "lucide-react";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { AuthField } from "@/components/auth/AuthField";
 
-export default function LoginPage() {
+type Props = {
+  error?: string;
+};
+
+export default function LoginPage({ error }: Props) {
   return (
     <AuthLayout
       title="Welcome back"
@@ -12,6 +16,14 @@ export default function LoginPage() {
       footerLinkHref="/register"
     >
       <form action="/api/auth/login" method="POST" className="space-y-5">
+        {error ? (
+          <p
+            role="alert"
+            className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2"
+          >
+            {error}
+          </p>
+        ) : null}
 
         <AuthField
           id="email"
