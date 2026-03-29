@@ -78,6 +78,7 @@ function mapResultsToJobs(
         ? Math.round(Math.min(1, Math.max(0, scoreRaw)) * 100)
         : 0;
     const salary = String(raw.salary ?? "").trim();
+    const listingUrl = String(raw.job_url ?? "").trim();
     return {
       id: stableJobId(raw, index),
       title: String(raw.title ?? "Unknown role"),
@@ -88,6 +89,7 @@ function mapResultsToJobs(
       description: String(raw.description ?? "").trim() || "No description available.",
       skills: skillsMentionedInJob(raw, profileSkills),
       matchScore,
+      listingUrl: listingUrl || undefined,
     };
   });
 }

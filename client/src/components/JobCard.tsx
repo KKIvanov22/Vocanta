@@ -1,5 +1,4 @@
 import { MapPin, DollarSign, Clock } from "lucide-react";
-import Link from "next/link";
 
 export type Job = {
   id: string;
@@ -11,6 +10,7 @@ export type Job = {
   description: string;
   skills: string[];
   matchScore: number;
+  listingUrl?: string;
 };
 
 type JobCardProps = {
@@ -23,7 +23,14 @@ const matchColor = (score: number) => {
   return "bg-gray-50 text-gray-600 border-gray-200";
 };
 
+function isHttpUrl(s: string): boolean {
+  return /^https?:\/\//i.test(s.trim());
+}
+
 export function JobCard({ job }: JobCardProps) {
+  const listingUrl = job.listingUrl?.trim() ?? "";
+  const canOpenListing = isHttpUrl(listingUrl);
+
   return (
     <div className="group flex flex-col bg-white border border-gray-100 rounded-2xl p-6 hover:shadow-lg hover:shadow-gray-100 hover:border-gray-200 transition-all duration-300">
 
@@ -90,13 +97,24 @@ export function JobCard({ job }: JobCardProps) {
         )}
       </div>
 
-      {/* CTA */}
-      <Link
-        href={`/jobs/${job.id}`}
-        className="inline-flex items-center justify-center h-9 text-sm font-semibold text-blue-600 border border-blue-100 bg-blue-50 hover:bg-blue-600 hover:text-white hover:border-blue-600 rounded-xl transition-all duration-200"
-      >
-        View Job
-      </Link>
+      {/* CTA — opens the real listing when the API provided job_url */}
+      {canOpenListing ? (
+        <a
+          href={listingUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center justify-center h-9 text-sm font-semibold text-blue-600 border border-blue-100 bg-blue-50 hover:bg-blue-600 hover:text-white hover:border-blue-600 rounded-xl transition-all duration-200"
+        >
+          View Job
+        </a>
+      ) : (
+        <span
+          className="inline-flex items-center justify-center h-9 text-sm font-semibold text-gray-400 border border-gray-100 bg-gray-50 rounded-xl cursor-not-allowed"
+          title="No listing URL available for this result"
+        >
+          View Job
+        </span>
+      )}
 
     </div>
   );
