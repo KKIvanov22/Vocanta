@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getBackendUrl } from "@/lib/backend";
+import { getBackendUrl } from "@/utils/backend";
 
 const TOKEN_COOKIE = "token";
 const JWT_MAX_AGE = 3600;
