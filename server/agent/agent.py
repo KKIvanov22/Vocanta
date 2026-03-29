@@ -44,9 +44,7 @@ class Agent:
 		self.session = self._build_http_session()
 
 		self.weaviate_client = self._build_weaviate_client()
-		self.weaviate_cloud = self._is_weaviate_cloud_deployment(
-			os.getenv("WEAVIATE_URL", "").strip()
-		)
+		self.weaviate_cloud = True
 		self.weaviate_query_agent = None
 		self.weaviate_personalization_agent = None
 		self._transformation_lock = threading.Lock()
@@ -184,8 +182,9 @@ class Agent:
 							"state": "error",
 							"reason": self._sanitize_text(str(exc), max_len=120),
 						}
-			except Exception:
-				pass
+			except Exception as e:
+				print("ERROR:", e)
+				raise
 
 			elapsed = time.monotonic() - start
 			for future, source in future_map.items():
@@ -622,13 +621,10 @@ class Agent:
 		return session
 
 	def _weaviate_inference_headers(self) -> Dict[str, str]:
-		key = (
-			os.getenv("WEAVIATE_INFERENCE_API_KEY", "").strip()
-			or os.getenv("OPENAI_API_KEY", "").strip()
-		)
+		key = os.getenv("WEAVIATE_INFERENCE_API_KEY", "").strip()
 		if not key:
 			return {}
-		return {"X-INFERENCE-PROVIDER-API-KEY": key}
+		return {"X-Google-Api-Key": key}
 
 	def _is_weaviate_cloud_deployment(self, url: str) -> bool:
 		explicit = os.getenv("WEAVIATE_CLOUD", "").strip().lower()
@@ -647,8 +643,9 @@ class Agent:
 		try:
 			if self.weaviate_client:
 				self.weaviate_client.close()
-		except Exception:
-			pass
+		except Exception as e:
+			print("ERROR:", e)
+			raise
 
 	def _build_weaviate_client(self):
 		weaviate_url = os.getenv("WEAVIATE_URL", "").strip()
@@ -658,8 +655,9 @@ class Agent:
 		try:
 			weaviate = importlib.import_module("weaviate")
 			from weaviate.classes.init import Auth
-		except Exception:
-			return None
+		except Exception as e:
+			print("ERROR:", e)
+			raise
 
 		api_key = os.getenv("WEAVIATE_API_KEY", "").strip()
 		headers = self._weaviate_inference_headers()
@@ -669,7 +667,7 @@ class Agent:
 				return weaviate.connect_to_weaviate_cloud(
 					cluster_url=weaviate_url,
 					auth_credentials=auth_creds,
-					headers=headers or None,
+					headers=headers,
 				)
 			parsed = urlparse(weaviate_url)
 			host = parsed.hostname
@@ -698,8 +696,9 @@ class Agent:
 				auth_credentials=auth_creds,
 				headers=headers or None,
 			)
-		except Exception:
-			return None
+		except Exception as e:
+			print("ERROR:", e)
+			raise
 
 	def _init_weaviate_agents(self):
 		if not self.weaviate_client or not self.weaviate_cloud:
@@ -728,8 +727,9 @@ class Agent:
 					)
 				],
 			)
-		except Exception:
-			self.weaviate_query_agent = None
+		except Exception as e:
+			print("ERROR:", e)
+			raise
 
 		try:
 			from weaviate.agents.personalization import PersonalizationAgent
@@ -768,6 +768,13 @@ class Agent:
 			if self.weaviate_client.collections.exists("JobListing"):
 				return
 
+			gemini_model = "text-embedding-004"
+			project_id = os.getenv("WEAVIATE_GOOGLE_PROJECT_ID", "").strip() or None
+
+			vectorizer_kwargs: Dict[str, Any] = {"model_id": gemini_model}
+			if project_id:
+				vectorizer_kwargs["project_id"] = project_id
+
 			self.weaviate_client.collections.create(
 				name="JobListing",
 				properties=[
@@ -780,7 +787,7 @@ class Agent:
 					Property(name="posted_date", data_type=DataType.TEXT),
 					Property(name="description", data_type=DataType.TEXT),
 				],
-				vectorizer_config=Configure.Vectorizer.text2vec_openai(),
+				vectorizer_config=Configure.Vectorizer.text2vec_google(**vectorizer_kwargs),
 			)
 		except Exception:
 			pass

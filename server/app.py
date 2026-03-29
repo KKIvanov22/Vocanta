@@ -6,9 +6,6 @@ from dotenv import load_dotenv
 import os
 from pathlib import Path
 
-from data.redis_cache import RedisCache
-from routes.auth_routes import auth_bp
-from routes.job_agent import job_agent_bp
 
 def _load_env():
 	server_dir = Path(__file__).resolve().parent
@@ -19,6 +16,10 @@ def _load_env():
 
 
 _load_env()
+
+from data.redis_cache import RedisCache
+from routes.auth_routes import auth_bp
+from routes.job_agent import job_agent_bp
 app = Flask(__name__)
 CORS(app)
 

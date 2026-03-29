@@ -141,6 +141,7 @@ export function DashboardView() {
     try {
       res = await fetch("/api/jobs/search", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           skills,
@@ -165,7 +166,18 @@ export function DashboardView() {
 
     if (res.status === 401) {
       setJobs([]);
-      setError("Your session expired. Please sign in again.");
+      const msg =
+        typeof json === "object" &&
+        json !== null &&
+        "message" in json &&
+        typeof (json as { message: unknown }).message === "string"
+          ? (json as { message: string }).message
+          : null;
+      setError(
+        msg === "Not authenticated"
+          ? "Sign in required to search jobs. Use the same site URL you used to sign in (for example, only localhost or only 127.0.0.1)."
+          : (msg ?? "Your session expired. Please sign in again."),
+      );
       setLoading(false);
       return;
     }

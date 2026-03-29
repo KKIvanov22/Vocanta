@@ -4,7 +4,7 @@ import { getBackendUrl } from "@/lib/backend";
 const TOKEN_COOKIE = "token";
 
 export async function POST(request: NextRequest) {
-  const token = request.cookies.get(TOKEN_COOKIE)?.value;
+  const token = request.cookies.get(TOKEN_COOKIE)?.value?.trim();
   if (!token) {
     return NextResponse.json(
       { status: "error", message: "Not authenticated" },
