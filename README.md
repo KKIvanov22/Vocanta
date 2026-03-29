@@ -1,30 +1,54 @@
-    
+<a id="readme-top"></a>
+
+<div align="center">
+
+[![Contributors](https://img.shields.io/github/contributors/KKIvanov22/Vocanta?style=for-the-badge)](https://github.com/KKIvanov22/Vocanta/graphs/contributors)
+[![Forks](https://img.shields.io/github/forks/KKIvanov22/Vocanta?style=for-the-badge)](https://github.com/KKIvanov22/Vocanta/network/members)
+[![Stars](https://img.shields.io/github/stars/KKIvanov22/Vocanta?style=for-the-badge)](https://github.com/KKIvanov22/Vocanta/stargazers)
+[![Issues](https://img.shields.io/github/issues/KKIvanov22/Vocanta?style=for-the-badge)](https://github.com/KKIvanov22/Vocanta/issues)
+[![License](https://img.shields.io/github/license/KKIvanov22/Vocanta?style=for-the-badge)](https://github.com/KKIvanov22/Vocanta/blob/main/LICENSE)
+
+</div>
+
+<div align="center">
+
+<h1>Vocanta</h1>
+
+<p>
+AI-powered job recommendation and HR assistant platform built with a modern full-stack AI architecture.
+</p>
+
+</div>
+
+---
+
+<div align="center">
+
+## 🚀 Tech Stack
+
+![Next.js](https://img.shields.io/badge/Next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)
+![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
+![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-009688?style=for-the-badge&logo=flask&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white)
+![Weaviate](https://img.shields.io/badge/Weaviate-FF4D4D?style=for-the-badge&logo=weaviate&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![Docker Compose](https://img.shields.io/badge/Docker%20Compose-0db7ed?style=for-the-badge&logo=docker&logoColor=white)
+
+</div>
 
 ---
 
 ## 📌 About The Project
 
-Vocanta is a full-stack AI-powered recruitment and job-matching system designed to connect candidates with relevant jobs using semantic search and embeddings.
+Vocanta is a full-stack AI-powered recruitment and job-matching system that uses semantic search and embeddings to connect candidates with the most relevant opportunities.
 
-It consists of:
+It combines:
 
-* **Next.js client (**``**)** – Frontend for users and recruiters
-* **Python server (**``**)** – Backend API with Docker, PostgreSQL, and Weaviate integration
-
-The system enables intelligent job-candidate matching using vector search and structured relational data.
-
----
-
-## ⚙️ Built With
-
-* Next.js
-* React
-* Python
-* FastAPI / Flask
-* PostgreSQL
-* Weaviate
-* Docker
-* Docker Compose
+- ⚡ **Next.js frontend** for recruiters and candidates
+- 🧠 **Python backend API** for business logic and AI processing
+- 🗄️ **PostgreSQL** for structured relational data
+- 🔍 **Weaviate vector database** for semantic search and embeddings
 
 ---
 
@@ -32,8 +56,8 @@ The system enables intelligent job-candidate matching using vector search and st
 
 ```text
 Vocanta/
-├── client/        # Next.js frontend
-├── server/        # Python backend (API + Docker + DB)
+├── client/               # Next.js frontend
+├── server/               # Python backend (API + Docker + DB)
 │   ├── docker-compose.yml
 │   ├── .env.example
 │   └── ...
@@ -46,14 +70,18 @@ Vocanta/
 
 ### Prerequisites
 
-* Node.js 18+
-* Python 3.10+
-* Docker & Docker Compose
-* Git
+![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+
+- Node.js 18+
+- Python 3.10+
+- Docker & Docker Compose
+- Git
 
 ---
 
-## 🔧 Installation
+## ⚙️ Installation
 
 ### 1. Clone repository
 
@@ -64,7 +92,7 @@ cd Vocanta
 
 ---
 
-### 2. Setup client
+### 2. Setup frontend
 
 ```bash
 cd client
@@ -80,7 +108,7 @@ http://localhost:3000
 
 ---
 
-### 3. Setup server
+### 3. Setup backend
 
 ```bash
 cd server
@@ -90,15 +118,13 @@ docker-compose up --build
 
 This starts:
 
-* Backend API
-* PostgreSQL database
-* Weaviate vector database
+- Backend API
+- PostgreSQL database
+- Weaviate vector database
 
 ---
 
 ## 🧠 Environment Variables
-
-Create `server/.env` from `.env.example`:
 
 ```env
 POSTGRES_USER=your_user
@@ -112,14 +138,14 @@ WEAVIATE_URL=http://weaviate:8080
 
 ## ▶️ Usage
 
-Start frontend:
+Frontend:
 
 ```bash
 cd client
 npm run dev
 ```
 
-Start backend:
+Backend:
 
 ```bash
 cd server
@@ -134,38 +160,50 @@ http://localhost:8000
 
 ---
 
+## 🧭 Roadmap
 
+- Improve AI matching accuracy using embeddings
+- Add authentication system (JWT / OAuth)
+- Improve Weaviate schema design
+- Recruiter analytics dashboard
+- Production deployment (AWS / Railway / Fly.io)
+- CI/CD pipeline
+
+---
 
 ## 🤝 Contributing
 
 1. Fork repo
-2. Create branch
-
+2. Create feature branch
    ```bash
    git checkout -b feature/AmazingFeature
    ```
 3. Commit changes
-
    ```bash
    git commit -m "Add AmazingFeature"
    ```
 4. Push branch
-
    ```bash
    git push origin feature/AmazingFeature
    ```
-5. Open PR
+5. Open Pull Request
 
 ---
 
 ## 📄 License
 
-GNU GPL v3.0 – see LICENSE file.
+Distributed under GNU GPL v3.0.
 
 ---
 
 ## 📬 Contact
 
-GitHub: [https://github.com/KKIvanov22](https://github.com/KKIvanov22) Project: [https://github.com/KKIvanov22/Vocanta](https://github.com/KKIvanov22/Vocanta)
+GitHub: https://github.com/KKIvanov22
+Project: https://github.com/KKIvanov22/Vocanta
 
 ---
+
+<p align="center">⭐ If you like this project, consider starring it ⭐</p>
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
