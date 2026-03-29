@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
         `/register?error=${encodeURIComponent(error)}`,
         request.url,
       ),
+      303,
     );
 
   if (!name || !email || !password) {
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const res = NextResponse.redirect(new URL("/dashboard", request.url));
+  const res = NextResponse.redirect(new URL("/dashboard", request.url), 303);
   res.cookies.set(TOKEN_COOKIE, data.token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
