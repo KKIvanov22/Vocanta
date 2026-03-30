@@ -31,6 +31,7 @@ AI-powered job recommendation and HR assistant platform built with a modern full
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Flask](https://img.shields.io/badge/Flask-009688?style=for-the-badge&logo=flask&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-316192?style=for-the-badge&logo=redis&logoColor=white)
 ![Weaviate](https://img.shields.io/badge/Weaviate-FF4D4D?style=for-the-badge&logo=weaviate&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
 ![Docker Compose](https://img.shields.io/badge/Docker%20Compose-0db7ed?style=for-the-badge&logo=docker&logoColor=white)
@@ -48,6 +49,7 @@ It combines:
 - ⚡ **Next.js frontend** for recruiters and candidates
 - 🧠 **Python backend API** for business logic and AI processing
 - 🗄️ **PostgreSQL** for structured relational data
+- 🚗 **Redis** for caching
 - 🔍 **Weaviate vector database** for semantic search and embeddings
 
 ---
@@ -120,6 +122,7 @@ This starts:
 
 - Backend API
 - PostgreSQL database
+- Redis
 - Weaviate vector database
 
 ---
@@ -160,16 +163,6 @@ http://localhost:8000
 
 ---
 
-## 🧭 Roadmap
-
-- Improve AI matching accuracy using embeddings
-- Add authentication system (JWT / OAuth)
-- Improve Weaviate schema design
-- Recruiter analytics dashboard
-- Production deployment (AWS / Railway / Fly.io)
-- CI/CD pipeline
-
----
 
 ## 🤝 Contributing
 
@@ -192,7 +185,7 @@ http://localhost:8000
 
 ## 📄 License
 
-Distributed under GNU GPL v3.0.
+Distributed under MIT license.
 
 ---
 
